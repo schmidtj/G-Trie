@@ -49,8 +49,11 @@ class GTrieNode:
     def setGraph(self, graph):
         self.graph = graph.copy()
         
-    def getGraph(self):
-        return self.graph
+    def getGraph(self, copy=False):
+        if copy:
+            return self.graph.copy()
+        else:
+            return self.graph
     
     def setOutLinks(self, links):
         self.out_links = links
@@ -259,7 +262,10 @@ class GTrie:
         self.max_matches = maximum
         
     def setProbability(self, node, probability):
-        node.setProbability(probability[node.getDepth()])
+        if probability == []:
+            node.setProbability(1)
+        else:
+            node.setProbability(probability[node.getDepth()])
         for child in node.getChildren():
             self.setProbability(child, probability)
     
@@ -276,7 +282,17 @@ class GTrie:
             if updateParent:
                 parent.setProbability(0.)
                 self.updateProbabilities(parent)
-                      
+                
+    def get_subgraphs(self, node=None, subgraphs=[]):
+        if node is None:
+            self.get_subgraphs(self.root, subgraphs)
+            return subgraphs
+        else:
+            if node.isLeaf():
+                subgraphs.append(node.getGraph(copy=True))
+            for child in node.getChildren():
+                self.get_subgraphs(child, subgraphs)
+                        
     def read(self, path):
         self.root = pickle.load(open(path, "rb"))
         
@@ -296,7 +312,9 @@ class GTrie:
         
         label = len(Graph.nodes())
         while len(Graph.nodes()) > 0:
-            articulations = list(networkx.articulation_points(Graph))
+            
+            articulations = list(networkx.articulation_points(Graph.to_undirected())) \
+                if networkx.is_directed(Graph) else list(networkx.articulation_points(Graph))
             current_degrees = temp_degrees = Graph.degree()
             
             #Remove articulation points from consideration
@@ -345,7 +363,8 @@ class GTrie:
         return retGraph
     
     def GTrieInsert(self, graph, label=None, states=False):
-        components = networkx.connected_components(graph)
+        components = networkx.connected_components(graph.to_undirected()) \
+            if networkx.is_directed(graph) else networkx.connected_components(graph)
         component_len = [1 for x in components if len(x) > 1]
         if len(components) > 1 and sum(component_len) > 1:
             print "Illegal Graph Insert: Graph has more than one connnected component."
@@ -384,13 +403,13 @@ class GTrie:
                     
             new_child = GTrieNode()
             new_child.setDepth(k)
-            new_child.setInLinks(row)
-            new_child.setOutLinks(column)
+            new_child.setInLinks(column)
+            new_child.setOutLinks(row)
             new_child.setGraph(graph.subgraph(graph.nodes()[:k+1]))
             #new_child.setGraph(graph.subgraph(graph.nodes()[:k]))
-            new_child.setNodeStates([graph.node[x] for x in new_child.getGraph().nodes()])
-            new_child.setInLinkStates(row)
-            new_child.setOutLinkStates(column)
+            new_child.setNodeStates([graph.node[x] for x in new_child.getGraph(copy=True).nodes()])
+            new_child.setInLinkStates(column)
+            new_child.setOutLinkStates(row)
             node.insertChild(new_child)
             new_child.setParent(node)
             
@@ -402,7 +421,7 @@ class GTrie:
             self.insertRecursive(graph, conditions, matrix, new_child, k+1, label, states)
                 
     
-    def GTrieMatch(self, graph, probability, labels=False, states=False):
+    def GTrieMatch(self, graph, probability=[], labels=False, states=False):
         self.clearMatch()
         self.setProbability(self.root, probability)
         for child in self.root.getChildren():
@@ -441,8 +460,8 @@ class GTrie:
         if nodes_used == []:
             candidates = [x for x in graph.nodes() if x >= min_value]
         else:
-
-            connections = [set(graph.neighbors(x)) for x in nodes_used]
+            cand_graph = graph.to_undirected() if networkx.is_directed(graph) else graph
+            connections = [set(cand_graph.neighbors(x)) for x in nodes_used]
             if trie_node.getGraph().degree(trie_node.getGraph().nodes()[len(nodes_used)]) == 0:
                 connections.append(set([x for x, y in graph.degree_iter() if y == 0]))
             connections = list(set.union(*connections))
@@ -627,93 +646,51 @@ class GTrie:
             self.GTrieInsert(graph, label=count,states=True)
             count += 1
         
-        
+    def insert_from_network_frames(self, path):
+        frames = NetworkFrames.NetworkFrames()
+        frames.readGraphML(path)
+        index = 0
+        for frame in frames.getInputNetworks():
+            self.GTrieInsert(frame, index)
+            index += 1
         
 if __name__ == "__main__":
-    #correct_trie = GTrie()
-    #incorrect_trie = GTrie()
-    #unconnected_trie = GTrie()
-    real_data_test = GTrie()
-    dimo = networkx.read_graphml("Dimo_1.graphML")
-    compressed = networkx.read_graphml("Compressed_1.graphML")
-    test_graph = networkx.read_graphml("GTrie_Test_Network.graphML")
-    #trie.createGTrieWithFour()
-    #correct_trie.insertEdgeStateTest(correct=True)
-    #incorrect_trie.insertEdgeStateTest()
-    #unconnected_trie.unconnectedNodeTest()
-    #match = networkx.complete_graph(6)
-    real_data_test.realDataTest()
-    real_data_test.setMaxMatches(5000)
-    
-    #edge_state_test = networkx.Graph()
-    #edge_state_test.add_nodes_from([1,2,3,4,5])
-    #edge_state_test.add_edge(1,2,state=1)
-    #edge_state_test.add_edge(1,3,state=1)
-    #edge_state_test.add_edge(1,4,state=2)
-    #edge_state_test.add_edge(2,4,state=1)
-    #edge_state_test.add_edge(3,4,state=1)
-    #edge_state_test.add_edge(2,5,state=2)
-    #edge_state_test.add_edge(3,5,state=2)
-    #edge_state_test.add_edge(1,5,state=1)
-    
-    #unconnected_test = networkx.Graph()
-    #unconnected_test.add_nodes_from([1,2,3,4,5,6])
-    #unconnected_test.add_edges_from([(1,2),(1,3),(2,3)])
-    
-    
-    #pos=networkx.fruchterman_reingold_layout(test_graph)
-    #networkx.draw(test_graph,pos)
+
+    directed_trie = GTrie()
+    directed_trie.insert_from_network_frames('ff_lhs.graphML')
+    directed_network = networkx.readwrite.read_graphml('test_network.graphML')
+    pos=networkx.fruchterman_reingold_layout(directed_network)
+    networkx.draw(directed_network,pos)
     #networkx.draw_networkx_edge_labels(test_graph, pos)
-    #pylab.show()         
+    pylab.show()
+    
+    directed_trie.GTrieMatch(directed_network, labels=True)
     #trie.read("GTrieTest.p")
     #import cProfile
     #import StringIO
     #import pstats
     #pr = cProfile.Profile()
     #pr.enable()
-    import time
-    start = time.time()
-    print "Num nodes: " + str(len(test_graph.nodes()))
-    print "Num edges: " + str(len(test_graph.edges()))
+    #import time
+    #start = time.time()
+    #print "Num nodes: " + str(len(test_graph.nodes()))
+    #print "Num edges: " + str(len(test_graph.edges()))
     #correct_trie.GTrieMatch(edge_state_test,[1,1,1,1,1], states=True)
     #incorrect_trie.GTrieMatch(edge_state_test,[1,1,1,1,1], states=True)
-    real_data_test.GTrieMatch(test_graph,[1,1,1,.01,.01],labels=True, states=True)
-    elapsed = time.time() - start
-    print "GTrie Elapsed Time: (3,5 complete graph)" + str(elapsed)
+    #real_data_test.GTrieMatch(test_graph,[1,1,1,.01,.01],labels=True, states=True)
+    #elapsed = time.time() - start
+    #print "GTrie Elapsed Time: (3,5 complete graph)" + str(elapsed)
 
-    for key in real_data_test.dict_matches.iterkeys():
-        print "Length of key: " + str(key) + " is: " + str(len(real_data_test.dict_matches[key]))
+    for key in directed_trie.dict_matches.iterkeys():
+        print "Length of key: " + str(key) + " is: " + str(len(directed_trie.dict_matches[key]))
+        print "Isomorphs: ", [(graph.nodes()) for graph in directed_trie.dict_matches[key]]
     #print len(correct_trie.matches)
     #print len(incorrect_trie.matches)
     #num_gtrie_matches = len(trie.matches)
     #print trie.matches  
     
 
-    '''
-    four_1 = networkx.Graph()
-    four_2 = networkx.Graph()
-    four_3 = networkx.Graph()
-    four_4 = networkx.Graph()
-    four_5 = networkx.Graph()
-    four_6 = networkx.Graph()
-    three_1 = networkx.Graph()
-    three_2 = networkx.Graph()
-    four_1.add_nodes_from([1,2,3,4])
-    four_2.add_nodes_from([1,2,3,4])
-    four_3.add_nodes_from([1,2,3,4])
-    four_4.add_nodes_from([1,2,3,4])
-    four_5.add_nodes_from([1,2,3,4])
-    four_6.add_nodes_from([1,2,3,4])
-    three_1.add_nodes_from([1,2,3])
-    three_2.add_nodes_from([1,2,3])
-    four_1.add_edges_from([(1,4),(2,4),(3,4)])
-    four_2.add_edges_from([(1,3),(1,4),(2,4)])
-    four_3.add_edges_from([(1,3),(1,4),(2,4),(3,4)])
-    four_4.add_edges_from([(1,3),(1,4),(2,3),(2,4)])
-    four_5.add_edges_from([(1,3),(1,4),(2,3),(2,4),(3,4)])
-    four_6.add_edges_from([(1,2),(1,3),(1,4),(2,3),(2,4),(3,4),])
-    three_1.add_edges_from([(1,2), (2,3), (1,3)])
-    three_2.add_edges_from([(1,2), (2,3)])    
+    '''   
     #pr.disable()
     #s = StringIO.StringIO()
     #sortby = 'cumulative'
