@@ -366,7 +366,7 @@ class GTrie:
         components = networkx.connected_components(graph.to_undirected()) \
             if networkx.is_directed(graph) else networkx.connected_components(graph)
         component_len = [1 for x in components if len(x) > 1]
-        if len(components) > 1 and sum(component_len) > 1:
+        if len(list(components) > 1 and sum(component_len) > 1:
             print "Illegal Graph Insert: Graph has more than one connnected component."
             return
         cannonGraph = self.GTCannon(graph.copy())
