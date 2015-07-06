@@ -96,13 +96,14 @@ class GTrieNode:
     def setParentSymConditions(self, conditions):
         self.addParentSymConditions(conditions)
         parent = self.getParent()
-        while parent.getDepth() >= 1:
-            new_conditions = []
-            for condition in conditions:
-                if condition[0] in parent.getGraph().nodes() and condition[1] in parent.getGraph().nodes():
-                    new_conditions.append(condition)
-            parent.addParentSymConditions(new_conditions)
-            parent = parent.getParent()
+        if parent != None:
+            while parent.getDepth() >= 1:
+                new_conditions = []
+                for condition in conditions:
+                    if condition[0] in parent.getGraph().nodes() and condition[1] in parent.getGraph().nodes():
+                        new_conditions.append(condition)
+                parent.addParentSymConditions(new_conditions)
+                parent = parent.getParent()
         
     def addParentSymConditions(self, conditions):
         self.parent_sym_conditions.append(conditions)
@@ -237,10 +238,11 @@ class GTrie:
     Pedro Ribeiro and Fernando Silva"""
 
     #----------------------------------------------------------------------
-    def __init__(self):
+    def __init__(self, include_null_graph=True):
         """Constructor"""
         self.root = GTrieNode()
         self.utility = Utility.utility()
+        self.null_graph = include_null_graph
         self.matches = []
         self.dict_matches = {}
         self.max_matches = sys.maxint
@@ -303,6 +305,11 @@ class GTrie:
         """Turn graph into canonical form
         Note: Relies on NetworkX articulation_points which is restricted to 
         undirected graphs"""
+        
+        # Handle case where graph is empty.
+        if len(Graph.nodes()) == 0:
+            return Graph
+        
         lex_labeling = self.utility.lexicographicallyLargestLabeling(Graph)
         Graph = networkx.relabel_nodes(Graph, lex_labeling,copy=True)
         retGraph = Graph.copy()
@@ -363,14 +370,17 @@ class GTrie:
         return retGraph
     
     def GTrieInsert(self, graph, label=None, states=False):
+        if not self.root.isLeaf() and self.null_graph:
+            self.insertRecursive(networkx.Graph(), [], networkx.adjacency_matrix(networkx.Graph()).todense(),
+                                 self.root, 0, label, states)
         components = networkx.connected_components(graph.to_undirected()) \
             if networkx.is_directed(graph) else networkx.connected_components(graph)
         component_len = [1 for x in components if len(x) > 1]
-        if len(list(components) > 1 and sum(component_len) > 1:
+        if len(list(components)) > 1 and sum(component_len) > 1:
             print "Illegal Graph Insert: Graph has more than one connnected component."
             return
         cannonGraph = self.GTCannon(graph.copy())
-        matrix = networkx.adjacency_matrix(cannonGraph)
+        matrix = networkx.adjacency_matrix(cannonGraph).todense()
         conditions = self.utility.symmetryConditions(cannonGraph)
         self.insertRecursive(cannonGraph, conditions, matrix, self.root, 0, label, states)
         
@@ -424,11 +434,17 @@ class GTrie:
     def GTrieMatch(self, graph, probability=[], labels=False, states=False):
         self.clearMatch()
         self.setProbability(self.root, probability)
+        self.add_null_match(graph, self.root, labels)
         for child in self.root.getChildren():
             nodes_used = []
             if random.random() <= child.getProbability():
                 self.match(graph, child, nodes_used, labels, states)
-            
+    
+    def add_null_match(self, graph, trie_node, labels):
+        if trie_node.getMatchCount() < self.max_matches and \
+           trie_node.isLeaf() and self.null_graph:
+            self.foundMatch(trie_node, networkx.Graph(), [], labels)
+    
     def match(self, graph, trie_node, nodes_used, labels, states):
         matched_vertices = self.matchingVertices(graph, trie_node, nodes_used, states)
         
@@ -654,9 +670,19 @@ class GTrie:
             self.GTrieInsert(frame, index)
             index += 1
         
+    def empty_graph_test(self):
+        graph = networkx.Graph()
+        self.GTrieInsert(graph)
+        empty_test = networkx.Graph()
+        self.GTrieMatch(empty_test)
+        num_gtrie_matches = len(self.matches)
+        print self.matches          
+    
 if __name__ == "__main__":
 
-    directed_trie = GTrie()
+    empty_tree = GTrie()
+    empty_tree.empty_graph_test()
+    '''directed_trie = GTrie()
     directed_trie.insert_from_network_frames('ff_lhs.graphML')
     directed_network = networkx.readwrite.read_graphml('test_network.graphML')
     pos=networkx.fruchterman_reingold_layout(directed_network)
@@ -687,7 +713,7 @@ if __name__ == "__main__":
     #print len(correct_trie.matches)
     #print len(incorrect_trie.matches)
     #num_gtrie_matches = len(trie.matches)
-    #print trie.matches  
+    #print trie.matches  '''
     
 
     '''   
